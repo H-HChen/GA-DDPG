@@ -7,18 +7,19 @@ import numpy as np
 import IPython
 import os
 
+
 class Panda:
-    def __init__(self, stepsize=1e-3, realtime=0, init_joints=None, base_shift=[0,0,0]):
+    def __init__(self, stepsize=1e-3, realtime=0, init_joints=None, base_shift=[0, 0, 0]):
         self.t = 0.0
         self.stepsize = stepsize
         self.realtime = realtime
-        self.control_mode = "position" 
+        self.control_mode = "position"
 
-        self.position_control_gain_p = [0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01]
-        self.position_control_gain_d = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+        self.position_control_gain_p = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+        self.position_control_gain_d = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         f_max = 250
-        self.max_torque = [f_max,f_max,f_max,f_max,f_max,f_max,f_max,100,100,100,100] 
-           
+        self.max_torque = [f_max, f_max, f_max, f_max, f_max, f_max, f_max, 100, 100, 100, 100]
+
         # connect pybullet
         p.setRealTimeSimulation(self.realtime)
 
@@ -30,18 +31,18 @@ class Panda:
                                 useFixedBase=True,
                                 flags=p.URDF_USE_SELF_COLLISION)
         self._base_position = [-0.05 - base_shift[0], 0.0 - base_shift[1], -0.65 - base_shift[2]]
-        self.pandaUid = self.robot        
+        self.pandaUid = self.robot
 
         # robot parameters
         self.dof = p.getNumJoints(self.robot)
         c = p.createConstraint(self.robot,
-                       8,
-                       self.robot,
-                       9,
-                       jointType=p.JOINT_GEAR,
-                       jointAxis=[1, 0, 0],
-                       parentFramePosition=[0, 0, 0],
-                       childFramePosition=[0, 0, 0])
+                               8,
+                               self.robot,
+                               9,
+                               jointType=p.JOINT_GEAR,
+                               jointAxis=[1, 0, 0],
+                               parentFramePosition=[0, 0, 0],
+                               childFramePosition=[0, 0, 0])
         p.changeConstraint(c, gearRatio=-1, erp=0.1, maxForce=50)
 
         self.joints = []
@@ -62,31 +63,30 @@ class Panda:
             self.target_pos.append((self.q_min[j] + self.q_max[j])/2.0)
             self.target_torque.append(0.)
         self.reset(init_joints)
-        
 
     def reset(self, joints=None):
-        self.t = 0.0        
+        self.t = 0.0
         self.control_mode = "position"
         p.resetBasePositionAndOrientation(self.pandaUid, self._base_position,
-                                      [0.000000, 0.000000, 0.000000, 1.000000])
+                                          [0.000000, 0.000000, 0.000000, 1.000000])
         if joints is None:
-            self.target_pos = [  
+            self.target_pos = [
                     0.0, -1.285, 0, -2.356, 0.0, 1.571, 0.785, 0, 0.04, 0.04]
-             
+
             self.target_pos = self.standardize(self.target_pos)
             for j in range(self.dof):
                 self.target_torque[j] = 0.
-                p.resetJointState(self.robot,j,targetValue=self.target_pos[j])
-        
+                p.resetJointState(self.robot, j, targetValue=self.target_pos[j])
+
         else:
             joints = self.standardize(joints)
             for j in range(self.dof):
                 self.target_pos[j] = joints[j]
                 self.target_torque[j] = 0.
-                p.resetJointState(self.robot,j,targetValue=self.target_pos[j])
+                p.resetJointState(self.robot, j, targetValue=self.target_pos[j])
         self.resetController()
         self.setTargetPositions(self.target_pos)
-      
+
     def step(self):
         self.t += self.stepsize
         p.stepSimulation()
@@ -97,7 +97,6 @@ class Panda:
                                     controlMode=p.VELOCITY_CONTROL,
                                     forces=[0. for i in range(self.dof)])
 
-
     def standardize(self, target_pos):
         if len(target_pos) == 9:
             if type(target_pos) == list:
@@ -107,7 +106,7 @@ class Panda:
         target_pos = np.array(target_pos)
         if len(target_pos) == 10:
             target_pos = np.append(target_pos, 0)
-       
+
         target_pos = np.minimum(np.maximum(target_pos, self._joint_min_limit), self._joint_max_limit)
         return target_pos
 
@@ -129,8 +128,8 @@ class Panda:
         if len(joint_pos) == 11:
             del joint_pos[7], joint_pos[-1]
             del joint_vel[7], joint_vel[-1]
-        return joint_pos, joint_vel 
- 
+        return joint_pos, joint_vel
+
     def solveInverseKinematics(self, pos, ori):
         return list(p.calculateInverseKinematics(self.robot, 7, pos, ori))
 

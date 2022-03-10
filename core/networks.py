@@ -178,7 +178,6 @@ class GoalFeature(nn.Module):
         return qt, torch.sigmoid(confidence).squeeze()
 
 
-
 class PointNetFeature(nn.Module):
     def __init__(
         self,
@@ -195,7 +194,7 @@ class PointNetFeature(nn.Module):
         super(PointNetFeature, self).__init__()
         self.input_dim = 3 + extra_latent
         self.split_feature = False
-        input_dim =  3 + policy_extra_latent if policy_extra_latent > 0 else self.input_dim
+        input_dim = 3 + policy_extra_latent if policy_extra_latent > 0 else self.input_dim
 
         self.policy_input_dim = input_dim
         self.encoder = self.create_encoder(
@@ -231,7 +230,7 @@ class PointNetFeature(nn.Module):
         # separate policy and value networks
         input_features = pc
         input_features_vis = input_features
-        if input_features.shape[-1] != 1024: # hand points included
+        if input_features.shape[-1] != 1024:  # hand points included
             input_features = input_features[..., 6:]
 
         input_features = (
@@ -248,6 +247,7 @@ class PointNetFeature(nn.Module):
             )
         z = self.encode(self.encoder, object_grasp_pc, input_features)
         return z, input_features_vis
+
 
 # https://github.com/pranz24/pytorch-soft-actor-critic/
 class QNetwork(nn.Module):
@@ -295,7 +295,7 @@ class QNetwork(nn.Module):
             x3 = F.relu(self.linear7(state))
             x3 = F.relu(self.linear8(x3))
             x3 = self.extra_pred(x3)
-            if self.extra_pred_dim == 7: # normalize quaternion
+            if self.extra_pred_dim == 7:  # normalize quaternion
                 x3 = torch.cat((F.normalize(x3[:, :4], p=2, dim=-1), x3[:, 4:]), dim=-1)
         return x1, x2, x3
 
@@ -369,7 +369,6 @@ class GaussianPolicy(nn.Module):
         if self.action_space is not None:
             mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return mean, log_prob, action, extra_pred
-
 
     def to(self, device):
         self.action_scale = self.action_scale.to(device)

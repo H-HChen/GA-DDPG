@@ -164,7 +164,7 @@ __C.RL_TRAIN.SAVE_EPISODE_INTERVAL = 50
 __C.RL_TRAIN.EXPERT_INIT_MIN_STEP = 0
 __C.RL_TRAIN.EXPERT_INIT_MAX_STEP = 15
 __C.RL_TRAIN.ENV_NEAR = 0.2
-__C.RL_TRAIN.ENV_FAR  = 0.5
+__C.RL_TRAIN.ENV_FAR = 0.5
 
 # misc hyperparameter
 __C.RL_TRAIN.load_test_scene_new = False
@@ -174,7 +174,7 @@ __C.RL_TRAIN.visdom = True
 __C.RL_TRAIN.domain_randomization = False
 __C.RL_TRAIN.buffer_full_size = -1
 __C.RL_TRAIN.buffer_start_idx = 0
-__C.RL_TRAIN.fill_data_step   = 10
+__C.RL_TRAIN.fill_data_step = 10
 
 
 def process_cfg(reset_model_spec=True):
@@ -194,43 +194,41 @@ def process_cfg(reset_model_spec=True):
 
     if reset_model_spec:
         if not __C.RL_TRAIN.use_image:
-            __C.RL_MODEL_SPEC = os.path.join(__C.MODEL_SPEC_DIR , "rl_pointnet_model_spec.yaml"
-            )
+            __C.RL_MODEL_SPEC = os.path.join(__C.MODEL_SPEC_DIR, "rl_pointnet_model_spec.yaml")
         else:
-            __C.RL_MODEL_SPEC = os.path.join(__C.MODEL_SPEC_DIR , "rl_resnet_model_spec.yaml"
-            )
+            __C.RL_MODEL_SPEC = os.path.join(__C.MODEL_SPEC_DIR, "rl_resnet_model_spec.yaml")
     if __C.RL_TRAIN.sa_channel_concat:
         __C.RL_TRAIN.value_model = True
     if __C.RL_TRAIN.policy_goal:
         __C.RL_TRAIN.train_goal_feature = True
 
     __C.omg_config = {
-        'traj_init':'grasp',
-        'scene_file': '' ,
+        'traj_init': 'grasp',
+        'scene_file': '',
         'vis': False,
-        'increment_iks': True ,
-        'terminate_smooth_loss': 3 ,
-        'ol_alg' :'Proj', #
-        'pre_terminate': True ,
+        'increment_iks': True,
+        'terminate_smooth_loss': 3,
+        'ol_alg': 'Proj',
+        'pre_terminate': True,
         'extra_smooth_steps': 5,
-        'traj_interpolate' :"linear",
-        'goal_idx' :-1,
+        'traj_interpolate': "linear",
+        'goal_idx': -1,
         'traj_delta': 0.05,
         'standoff_dist': 0.08,
         'allow_collision_point': 0,
-        'clearance' :0.03,
+        'clearance': 0.03,
         'ik_clearance': 0.07,
-        'smoothness_base_weight' :3,
+        'smoothness_base_weight': 3,
         'base_obstacle_weight': 1.,
         'target_hand_filter_angle': 90,
         'target_obj_collision': 1,
         'target_epsilon': 0.06,
-        'optim_steps' :1,
-        'ik_parallel' :False,
-        'ik_seed_num' :13,
+        'optim_steps': 1,
+        'ik_parallel': False,
+        'ik_seed_num': 13,
         'traj_max_step': int(__C.RL_MAX_STEP) + 6,
         'root_dir':  root_dir + "/",
-        'traj_min_step' :int(__C.RL_MAX_STEP) - 5,
+        'traj_min_step': int(__C.RL_MAX_STEP) - 5,
         'timesteps': int(__C.RL_MAX_STEP),
         'dynamic_timestep': False,
         'use_expert_plan': __C.RL_TRAIN.use_expert_plan,
@@ -280,7 +278,7 @@ def _merge_a_into_b(a, b):
         return
 
     for k, v in a.items():
-        if not k in b.keys():
+        if not (k in b.keys()):
             continue
 
         # the types must match, too
@@ -314,10 +312,12 @@ def cfg_from_file(filename=None, dict=None, reset_model_spec=True):
         _merge_a_into_b(yaml_cfg, dict)
     process_cfg(reset_model_spec=reset_model_spec)
 
+
 def save_cfg_to_file(filename, cfg):
     """Load a config file and merge it into the default options."""
     with open(filename, 'w+') as f:
         yaml.dump(cfg, f, default_flow_style=False)
+
 
 def cfg_repr(cfg, fmt='plain'):
     def helper(d):

@@ -9,6 +9,8 @@ import datetime
 import os
 import IPython
 from tensorboardX import SummaryWriter
+from experiments.config import *
+
 
 class ReplayMemoryWrapperBase(object):
     """
@@ -64,19 +66,20 @@ class ReplayMemoryWrapperBase(object):
                 self.memory.print_obj_performance(), self.memory.get_total_env_step(),
                 self.memory.get_expert_upper_idx(), 0.)
 
+
 class AgentWrapper(object):
     """
     Wrapper class for agent training and logging
     """
     def __init__(self, args_, config_,  pretrained_path=None, input_dim=512,
-                       logdir=None, set_init_step=False, model_surfix='latest', model_path=None, buffer_id=None):
+                 logdir=None, set_init_step=False, model_surfix='latest', model_path=None, buffer_id=None):
 
         from core.bc import BC
         from core.ddpg import DDPG
         from core import networks
         self.args = args_
         self.config = config_.RL_TRAIN
-        self.cfg = config_ # the global one
+        self.cfg = cfg  # the global one
         torch.manual_seed(self.args.seed)
         POLICY = self.args.policy
 
@@ -89,7 +92,6 @@ class AgentWrapper(object):
         self.updates = self.agent.load_model(pretrained_path, set_init_step=set_init_step, surfix=model_surfix)
         self.initial_updates = self.updates
         self.epoch = 0
-
 
     def get_agent_update_step(self):
         """ get agent update step """
@@ -119,7 +121,7 @@ class AgentWrapper(object):
     def select_action(self, state, actions=None, goal_state=None, remain_timestep=1,
                       gt_goal_rollout=True, curr_joint=None, gt_traj=None):
         """ on policy action """
-        action, traj, extra_pred, aux_pred = self.agent.select_action(state, actions=actions, goal_state=goal_state )
+        action, traj, extra_pred, aux_pred = self.agent.select_action(state, actions=actions, goal_state=goal_state)
         return action, traj, extra_pred, aux_pred
 
     def update_parameter(self, batch_data, updates, i):
@@ -138,7 +140,7 @@ class Trainer(object):
         #
         self.args = args_
         self.config = config_.RL_TRAIN
-        self.cfg = config_ # the global one
+        self.cfg = cfg  # the global one
         torch.manual_seed(self.cfg.RNG_SEED)
         self.agent_remote_id = agent_remote_id
         self.model_path = model_path
@@ -179,7 +181,7 @@ class Trainer(object):
 
     def write_external_info(self, reinit_count=0, env_step=0, online_env_step=0, buffer_curr_idx=0, online_buffer_curr_idx=0,
                             noise_scale=0, explore_ratio=0, gpu_usage=0, memory_usage=0, buffer_upper_idx=0, sample_time=0, online_buffer_upper_idx=0,
-                             ):
+                            ):
         """
         write external information to the tensorboard
         """
@@ -207,7 +209,7 @@ class Trainer(object):
         LOG_INTERVAL = 3
         self.epoch += 1
         if self.epoch < self.config.fill_data_step:
-            return [0] # collect some traj first
+            return [0]  # collect some traj first
         start_time = time.time()
         batch_size = self.config.batch_size
 
@@ -215,8 +217,8 @@ class Trainer(object):
         batch_data, online_batch_data = ray.get([self.buffer_remote_id.sample.remote(self.config.batch_size), self.online_buffer_remote_id.sample.remote(onpolicy_batch_size)])
 
         if self.config.ON_POLICY:
-            batch_data = {k: np.concatenate((batch_data[k], online_batch_data[k]), axis=0) for k in batch_data.keys() \
-                                if type(batch_data[k]) is np.ndarray and k in online_batch_data.keys()}
+            batch_data = {k: np.concatenate((batch_data[k], online_batch_data[k]), axis=0) for k in batch_data.keys()
+                          if type(batch_data[k]) is np.ndarray and k in online_batch_data.keys()}
         if len(batch_data) == 0: return [0]
 
         for i in range(self.config.updates_per_step):
@@ -228,12 +230,13 @@ class Trainer(object):
                                                         ])
 
             if self.config.ON_POLICY:
-                batch_data = {k: np.concatenate((batch_data[k], online_batch_data[k]), axis=0) for k in batch_data.keys() \
-                                 if type(batch_data[k]) is np.ndarray and k in online_batch_data.keys()}
+                batch_data = {k: np.concatenate((batch_data[k], online_batch_data[k]), axis=0) for k in batch_data.keys()
+                              if type(batch_data[k]) is np.ndarray and k in online_batch_data.keys()}
 
             infos = merge_two_dicts(lrs, main_loss)
             for k, v in infos.items():
-                if k in self.losses_info: self.losses_info[k].append(v)
+                if k in self.losses_info:
+                    self.losses_info[k].append(v)
             self.updates += 1
             self.agent_update_step = update_step
 
@@ -259,7 +262,7 @@ class Trainer(object):
         buffer_upper_idx, buffer_curr_idx, buffer_is_full, obj_performance_str, env_step, buffer_exp_idx, sample_time = buffer_info
         online_buffer_upper_idx, online_buffer_curr_idx, online_buffer_is_full, online_obj_performance_str, online_env_step, _, _ = online_buffer_info
         gpu_usage, memory_usage = get_usage()
-        incr_agent_update_step  = ray.get(self.agent_remote_id.get_agent_incr_update_step.remote())
+        incr_agent_update_step = ray.get(self.agent_remote_id.get_agent_incr_update_step.remote())
         milestone_idx = int((incr_agent_update_step > np.array(self.config.mix_milestones)).sum())
         explore_ratio = min(get_valid_index(self.config.explore_ratio_list, milestone_idx), self.config.explore_cap)
         noise_scale = self.config.action_noise * get_valid_index(self.config.noise_ratio_list, milestone_idx)
@@ -273,7 +276,7 @@ class Trainer(object):
                                     gpu_usage=gpu_usage,
                                     memory_usage=memory_usage,
                                     explore_ratio=explore_ratio,
-                                    noise_scale=noise_scale )
+                                    noise_scale=noise_scale)
 
         train_iter_time = (time.time() - start_time)
         self.writer.add_scalar('info/train_time', train_iter_time, self.updates)
@@ -284,7 +287,7 @@ class Trainer(object):
 
         headers = ['loss name', 'loss val']
         data = [(name, np.mean(list(loss)))
-                for name, loss in self.losses_info.items() if np.mean(list(loss)) != 0 ]
+                for name, loss in self.losses_info.items() if np.mean(list(loss)) != 0]
         print_and_write(self.file_handle, tabulate.tabulate(data, headers, tablefmt='psql'))
         print_and_write(self.file_handle, '== CONFIG: {} == \n== GPU: {} MEMORY: {} TIME: {} PID: {}'.format(
                         self.cfg.script_name, gpu_usage, memory_usage,
@@ -297,7 +300,7 @@ class Trainer(object):
 class ReplayMemoryWrapper(ReplayMemoryWrapperBase):
     pass
 
-@ray.remote(num_cpus=1,num_gpus=0.1)
+@ray.remote(num_cpus=1, num_gpus=0.1)
 class AgentWrapperGPU05(AgentWrapper):
     pass
 
