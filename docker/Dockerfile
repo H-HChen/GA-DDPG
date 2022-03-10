@@ -48,11 +48,11 @@ RUN pip3 install --upgrade pip
 
 ## Dependency installation
 RUN pip3 install torch==1.10.2+cu113 torchvision==0.11.3+cu113 torchaudio==0.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+RUN pip3 install open3d --ignore-installed PyYAML==3.13
 COPY ./package_apt.txt /
 COPY ./requirement_pip.txt /
 RUN apt update && xargs -a /package_apt.txt apt install -y
 RUN pip3 install -r /requirement_pip.txt
-RUN pip3 install --ignore-installed PyYAML==3.13
 RUN rm /package_apt.txt /requirement_pip.txt
 
 ## ROS1 installation

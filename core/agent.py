@@ -70,7 +70,7 @@ class Agent(object):
 
         grasp = None
         point_state_feature, network_input = self.state_feature_extractor(
-            point_state,
+            pc=point_state,
             grasp=grasp,
             concat_option=self.concat_option,
             feature_2=val,
