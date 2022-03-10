@@ -13,6 +13,7 @@ import IPython
 import time
 from core.loss import *
 
+
 class Agent(object):
     """
     A general agent class
@@ -46,7 +47,6 @@ class Agent(object):
         self.num_inputs = num_inputs
         self.policy, self.policy_optim, self.policy_scheduler, self.policy_target = get_policy_class('GaussianPolicy', self)
         self.action_dim = action_dim
-
 
     def unpack_batch(
         self,
@@ -129,22 +129,20 @@ class Agent(object):
         compute loss for policy and trajectory embedding
         """
 
-
         if self.policy_aux:
-            self.policy_grasp_aux_loss =  goal_pred_loss(self.aux_pred[self.goal_reward_mask, :7], self.target_grasp_batch[self.goal_reward_mask, :7] )
+            self.policy_grasp_aux_loss = goal_pred_loss(self.aux_pred[self.goal_reward_mask, :7],
+                                                        self.target_grasp_batch[self.goal_reward_mask, :7])
 
-        self.bc_loss =  pose_bc_loss(self.pi[self.expert_mask], self.expert_action_batch[self.expert_mask] )
+        self.bc_loss = pose_bc_loss(self.pi[self.expert_mask], self.expert_action_batch[self.expert_mask])
         if self.has_critic:
             self.bc_loss = self.bc_loss * (1 - self.mix_policy_ratio)
         return sum([getattr(self, name) for name in self.loss_info if name.endswith('loss') and not name.startswith('critic')])
-
 
     def update_parameters(self, batch_data, updates, k):
         """
         To be inherited
         """
         return {}
-
 
     def setup_feature_extractor(self, net_dict, eval=False):
         """
@@ -154,14 +152,14 @@ class Agent(object):
         goal_feature_extractor = net_dict["goal_feature_extractor"]
         self.goal_feature_extractor = goal_feature_extractor["net"]
         self.goal_feature_extractor_opt = goal_feature_extractor["opt"]
-        self.goal_feature_extractor_sch = goal_feature_extractor[ "scheduler" ]
-        self.state_feature_extractor =state_feature_extractor["net"]
+        self.goal_feature_extractor_sch = goal_feature_extractor["scheduler"]
+        self.state_feature_extractor = state_feature_extractor["net"]
         self.state_feature_extractor_optim = state_feature_extractor["opt"]
-        self.state_feature_extractor_scheduler = state_feature_extractor[ "scheduler" ]
-        self.state_feat_encoder_optim = state_feature_extractor[  "encoder_opt" ]
-        self.state_feat_encoder_scheduler = state_feature_extractor[ "encoder_scheduler" ]
-        self.state_feat_val_encoder_optim = state_feature_extractor[ "val_encoder_opt"  ]
-        self.state_feat_val_encoder_scheduler =state_feature_extractor[ "val_encoder_scheduler" ]
+        self.state_feature_extractor_scheduler = state_feature_extractor["scheduler"]
+        self.state_feat_encoder_optim = state_feature_extractor["encoder_opt"]
+        self.state_feat_encoder_scheduler = state_feature_extractor["encoder_scheduler"]
+        self.state_feat_val_encoder_optim = state_feature_extractor["val_encoder_opt"]
+        self.state_feat_val_encoder_scheduler = state_feature_extractor["val_encoder_scheduler"]
 
     def get_lr(self):
         """
@@ -213,7 +211,7 @@ class Agent(object):
         load batch data dictionary and compute extra data
         """
         update_step = self.update_step - self.init_step
-        self.loss_info  = list(get_loss_info_dict().keys())
+        self.loss_info = list(get_loss_info_dict().keys())
 
         for name in self.loss_info:
             setattr(self, name, torch.zeros(1, device=torch.device('cuda')))
@@ -228,13 +226,13 @@ class Agent(object):
         self.perturb_flag_batch = (self.perturb_flag_batch < 1).bool()
         self.goal_reward_mask = torch.ones_like(self.time_batch).bool() * self.reward_mask
         self.target_grasp_batch = self.goal_batch[:, :7]
-        self.target_goal_reward_mask =  self.goal_reward_mask # target_goal_reward_mask
-        self.target_reward_mask =  self.reward_mask
+        self.target_goal_reward_mask = self.goal_reward_mask  # target_goal_reward_mask
+        self.target_reward_mask = self.reward_mask
         self.target_return = self.return_batch
         self.target_expert_mask = self.expert_mask
-        self.target_expert_reward_mask =  self.expert_reward_mask
+        self.target_expert_reward_mask = self.expert_reward_mask
 
-        self.target_perturb_flag_batch =  self.perturb_flag_batch < 1
+        self.target_perturb_flag_batch = self.perturb_flag_batch < 1
         self.next_time_batch = self.time_batch - 1
         self.target_reward_batch = self.reward_batch
         self.target_mask_batch = self.mask_batch
@@ -277,7 +275,8 @@ class Agent(object):
             torch.no_grad()
             self.policy.eval()
             self.state_feature_extractor.eval()
-            if hasattr(self, "critic"): self.critic.eval()
+            if hasattr(self, "critic"):
+                self.critic.eval()
 
     def save_model(
         self,
@@ -298,16 +297,16 @@ class Agent(object):
 
         if actor_path is None:
             actor_path = "{}/{}_actor_{}_{}".format(
-                output_dir, self.name, self.env_name, surfix )
+                output_dir, self.name, self.env_name, surfix)
         if critic_path is None:
             critic_path = "{}/{}_critic_{}_{}".format(
-                output_dir, self.name, self.env_name, surfix  )
+                output_dir, self.name, self.env_name, surfix)
         if goal_feat_path is None:
             goal_feat_path = "{}/{}_goal_feat_{}_{}".format(
-                output_dir, self.name, self.env_name, surfix )
+                output_dir, self.name, self.env_name, surfix)
         if state_feat_path is None:
             state_feat_path = "{}/{}_state_feat_{}_{}".format(
-                output_dir, self.name, self.env_name, surfix )
+                output_dir, self.name, self.env_name, surfix)
 
         print("Saving models to {} and {}".format(actor_path, critic_path))
         if hasattr(self, "policy"):
@@ -328,7 +327,6 @@ class Agent(object):
                 },
                 critic_path,
             )
-
 
         if self.use_point_state:
             torch.save(
@@ -403,7 +401,6 @@ class Agent(object):
             print("load pretrained critic!!!!")
             hard_update(self.critic_target, self.critic, self.tau)
 
-
         if os.path.exists(state_feat_path):
             net_dict = torch.load(state_feat_path)
             self.state_feature_extractor.load_state_dict(net_dict["net"])
@@ -411,12 +408,12 @@ class Agent(object):
                 self.state_feature_extractor_optim.load_state_dict(net_dict["opt"])
                 self.state_feature_extractor_scheduler.load_state_dict(net_dict["sch"])
                 self.state_feat_encoder_optim.load_state_dict(net_dict["encoder_opt"])
-                self.state_feat_encoder_scheduler.load_state_dict( net_dict["encoder_sch"])
-                self.state_feat_val_encoder_optim.load_state_dict( net_dict["val_encoder_opt"])
+                self.state_feat_encoder_scheduler.load_state_dict(net_dict["encoder_sch"])
+                self.state_feat_val_encoder_optim.load_state_dict(net_dict["val_encoder_opt"])
                 self.state_feat_val_encoder_scheduler.load_state_dict(net_dict["val_encoder_sch"])
                 print("load feat optim")
             except:
-                print("loading feature optim has mismatches")
+                print(f"{bcolors.FAIL}loading feature optim has mismatches{bcolors.RESET}")
 
             print(
                 "load pretrained feature!!!! from: {} step :{}".format(
