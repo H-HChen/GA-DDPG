@@ -180,7 +180,6 @@ class ActorWrapper(object):
         init_joints = None
         for i in range(ENV_RESET_TRIALS):
             init_joints = rand_sample_joint(self.env, init_joints)
-            print(init_joints)
             if init_joints is not None:
                 self.env.reset_joint(init_joints)
                 start_rotation = self.env._get_ef_pose(mat=True)[:3, :3]

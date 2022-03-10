@@ -654,9 +654,7 @@ class PandaYCBEnv():
 
     def randomize_arm_init(self, near=0.35, far=0.50):
         target_forward = self._get_target_relative_pose('base')[:3, 3]
-        print('1')
         init_joints = self._sample_ef(target_forward, near=near, far=far)
-        print('2')
 
         if init_joints is not None:
             return list(init_joints) + [0, 0.04, 0.04]
