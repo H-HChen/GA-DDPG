@@ -57,3 +57,6 @@ qt5-default
 hdf4-tools
 python3-vtk7
 python3-sip
+libfmt-dev
+ninja-build
+apt-utils
