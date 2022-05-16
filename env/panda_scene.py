@@ -11,7 +11,7 @@ import pybullet as p
 import numpy as np
 import IPython
 
-from env.panda_gripper_hand_camera import Panda
+from env.tm5_gripper_hand_camera import Panda
 from transforms3d.quaternions import *
 import scipy.io as sio
 from core.utils import *
@@ -170,7 +170,7 @@ class PandaYCBEnv():
         self._standoff_dist = 0.08
 
         self.cam_offset = np.eye(4)
-        self.cam_offset[:3, 3] = (np.array([0.036, 0, 0.036]))   # camera offset
+        self.cam_offset[:3, 3] = (np.array([0.1186, 0., -0.0191344123493]))   # camera offset
         self.cam_offset[:3, :3] = euler2mat(0, 0, -np.pi/2)
         self.cur_goal = np.eye(4)
 
@@ -289,11 +289,10 @@ class PandaYCBEnv():
         self.curr_acc_points = np.zeros([3, 0])
         return None  # observation
 
-    def step(self, action, delta=False, obs=True, repeat=None, config=False, vis=False):
+    def step(self, action, delta=False, obs=True, repeat=150, config=False, vis=False):
         """
         Environment step.
         """
-        repeat = 150
         action = self.process_action(action, delta, config)
         self._panda.setTargetPositions(action)
         for _ in range(int(repeat)):
@@ -368,15 +367,18 @@ class PandaYCBEnv():
         """
 
         cur_joint = np.array(self._panda.getJointStates()[0])
-        cur_joint[-2:] = 0  # close finger
+        cur_joint[-1] = 0.8  # close finger
         observations = [self.step(cur_joint, repeat=300, config=True, vis=False)[0]]
-        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
 
         for i in range(10):
             pos = (pos[0], pos[1], pos[2] + 0.03)
             jointPoses = np.array(p.calculateInverseKinematics(self._panda.pandaUid,
-                                                               self._panda.pandaEndEffectorIndex, pos))
-            jointPoses[-2:] = 0.0
+                                                               self._panda.pandaEndEffectorIndex, pos,
+                                                               maxNumIterations=500,
+                                                               residualThreshold=1e-8))
+            jointPoses[6] = 0.8
+            jointPoses = jointPoses[:7].copy()
             obs = self.step(jointPoses, config=True)[0]
             if record:
                 observations.append(obs)
@@ -411,11 +413,11 @@ class PandaYCBEnv():
             depth_img = depth_img[..., 0]
             depth_img[nontarget_mask] = 10
             # hard coded region
-            depth_img_roi = depth_img[int(38. * self._window_height / 64):,
-                                      int(24. * self._window_width / 64):int(48 * self._window_width / 64)]
-            depth_img_roi_ = depth_img_roi[depth_img_roi < 0.1]
+            depth_img_roi = depth_img[int(58. * self._window_height / 64):,
+                                      int(21. * self._window_width / 64):int(42 * self._window_width / 64)]
+            depth_img_roi_ = depth_img_roi[depth_img_roi < 0.21]
             if depth_img_roi_.shape[0] > 1:
-                depth_heuristics = (depth_img_roi_ < 0.045).sum() > 10
+                depth_heuristics = (depth_img_roi_ < 0.115).sum() > 10
 
         return self._env_step >= self._maxSteps or depth_heuristics or self.target_fall_down()
 
@@ -597,7 +599,7 @@ class PandaYCBEnv():
         elif self._action_space == 'task6d':
             # transform to local coordinate
             cur_ef = np.array(self._panda.getJointStates()[0])[-3]
-            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
 
             pose = np.eye(4)
             pose[:3, :3] = quat2mat(tf_quat(orn))
@@ -612,9 +614,11 @@ class PandaYCBEnv():
             pos = new_pose[:3, 3]
 
             jointPoses = np.array(p.calculateInverseKinematics(self._panda.pandaUid,
-                                  self._panda.pandaEndEffectorIndex, pos, orn))
-            jointPoses[-2:] = 0.04
-            action = jointPoses
+                                  self._panda.pandaEndEffectorIndex, pos, orn,
+                                  maxNumIterations=500,
+                                  residualThreshold=1e-8))
+            jointPoses[6] = 0.0
+            action = jointPoses[:7]
         return action
 
     def _sample_ef(self, target, near=0.35, far=0.50):
@@ -665,7 +669,7 @@ class PandaYCBEnv():
         Get hand camera view
         """
         if cam_pose is None:
-            pos, orn = p.getLinkState(self._panda.pandaUid, 10)[:2]
+            pos, orn = p.getLinkState(self._panda.pandaUid, 18)[4:6]
             cam_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
         cam_pose_mat = unpack_pose(cam_pose)
 
@@ -674,7 +678,7 @@ class PandaYCBEnv():
         hand_near = 0.035
         hand_far = 2
         hand_proj_matrix = p.computeProjectionMatrixFOV(fov, aspect, hand_near, hand_far)
-        hand_cam_view_matrix = se3_inverse(cam_pose_mat.dot(rotX(-np.pi/2).dot(rotZ(-np.pi)))).T  # z backward
+        hand_cam_view_matrix = se3_inverse(cam_pose_mat.dot(rotX(np.pi/2).dot(rotY(-np.pi/2)))).T  # z backward
 
         lightDistance = 2.0
         lightDirection = self.table_pos - self._light_position
@@ -909,23 +913,6 @@ class PandaYCBEnv():
 
         return action
 
-    def convert_action_from_cartesian_to_joint(self, action):
-        """
-        Convert task space action to joint space action by ik approximately
-        """
-
-        curr_joint = np.array(self._panda.getJointStates()[0])
-        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
-        rot = quat2mat(tf_quat(orn)).dot(euler2mat(action[3], action[4], action[5]))
-        orn = ros_quat(mat2quat(rot))
-        position = rot.dot(action[:3])  # local coordinate
-        pos = (pos[0]+position[0], pos[1]+position[1], pos[2]+position[2])
-
-        jointPoses = np.array(p.calculateInverseKinematics(self._panda.pandaUid,
-                              self._panda.pandaEndEffectorIndex, pos, orn))
-        jointPoses[-2:] = 0.04
-        return np.subtract(jointPoses, curr_joint)
-
     def process_image(self, color, depth, mask, size=None):
         """
         Normalize RGBDM
@@ -971,7 +958,7 @@ class PandaYCBEnv():
         """
         Get all obejct poses with respect to the end effector
         """
-        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
         ef_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
         poses = []
         for idx, uid in enumerate(self._objectUids):
@@ -998,7 +985,7 @@ class PandaYCBEnv():
         """
         curr_joint = np.array(self._panda.getJointStates()[0])
         goal_set = self.planner_scene.traj.goal_set
-        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
         ef_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
 
         pos, orn = p.getBasePositionAndOrientation(self._objectUids[self.target_idx])  # to target
@@ -1027,7 +1014,7 @@ class PandaYCBEnv():
 
         if nearest and not self.collided_before:
             return self._get_nearest_goal_pose(rotz, mat)
-        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+        pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
         ef_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
         pos, orn = p.getBasePositionAndOrientation(self._objectUids[self.target_idx])  # to target
         obj_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
@@ -1044,9 +1031,9 @@ class PandaYCBEnv():
         end effector pose in world frame
         """
         if not mat:
-            return p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+            return p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
         else:
-            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
             return unpack_pose(list(pos) + [orn[3], orn[0], orn[1], orn[2]])
 
     def _get_target_relative_pose(self, option='base'):
@@ -1056,9 +1043,9 @@ class PandaYCBEnv():
         if option == 'base':
             pos, orn = p.getBasePositionAndOrientation(self._panda.pandaUid)
         elif option == 'ef':
-            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
         elif option == 'tcp':
-            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[:2]
+            pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
             rot = quat2mat(tf_quat(orn))
             tcp_offset = rot.dot(np.array([0, 0, 0.13]))
             pos = np.array(pos) + tcp_offset

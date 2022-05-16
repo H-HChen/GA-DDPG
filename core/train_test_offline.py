@@ -179,9 +179,9 @@ def test(run_iter=0):
         scene_file = 'scene_{}'.format(int(k))
         data_root = cfg.RL_TEST_SCENE
         scene_indexes.append(scene_file.split('/')[-1])
-        state = env.reset(save=False,   scene_file=scene_file ,
-                                        data_root_dir=data_root, reset_free=True,
-                                        cam_random=0)
+        state = env.reset(save=False,
+                          data_root_dir=data_root, reset_free=True,
+                          cam_random=0)
 
         cur_ef_pose = env._get_ef_pose(mat=True)
         cam_intr = get_info(state, 'intr')
