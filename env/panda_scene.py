@@ -170,7 +170,7 @@ class PandaYCBEnv():
         self._standoff_dist = 0.08
 
         self.cam_offset = np.eye(4)
-        self.cam_offset[:3, 3] = (np.array([0.1186, 0., -0.0191344123493]))   # camera offset
+        self.cam_offset[:3, 3] = (np.array([0.1186, 0., 0.0191344123493]))   # camera offset
         self.cam_offset[:3, :3] = euler2mat(0, 0, -np.pi/2)
         self.cur_goal = np.eye(4)
 
