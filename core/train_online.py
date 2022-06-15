@@ -224,10 +224,12 @@ class ActorWrapper(object):
             step, reward = 0., 0.
             done = False
             cur_episode = []
-            expert_plan, omg_cost = self.env.expert_plan()
-            expert_traj_length = len(expert_plan)
-            if expert_traj_length >= EXTEND_MAX_STEP or expert_traj_length < 5 or state is None:
+            self.env.setup_expert_scene()
+            expert_plan_world, _ = self.env.expert_plan()
+            expert_plan_world = np.array(expert_plan_world)
+            if not len(expert_plan_world) or state is None:
                 return [0]
+            expert_traj_length = len(expert_plan_world)
 
             init_info = self.env._get_init_info()
             expert_initial_step = np.random.randint(EXPERT_INIT_MIN_STEP, EXPERT_INIT_MAX_STEP)
@@ -249,13 +251,26 @@ class ActorWrapper(object):
 
                 if apply_dagger or apply_dart:  # replan
                     rest_expert_plan, _ = self.env.expert_plan(step=int(MAX_STEP-step-1))
-                    expert_plan = np.concatenate((expert_plan[:int(step)], rest_expert_plan), axis=0)
-                    expert_traj_length = len(expert_plan)
+                    expert_plan_world = np.vstack([expert_plan_world[:int(step)], rest_expert_plan])
+                    expert_traj_length = len(expert_plan_world)
 
-                goal_pose = self.env._get_relative_goal_pose(nearest=explore and not apply_dagger)
-                if step < len(expert_plan):
-                    expert_joint_action = expert_plan[int(step)]
-                expert_action = self.env.convert_action_from_joint_to_cartesian(expert_joint_action)
+                goal_pose = self.env._get_nearest_goal_pose()
+                if step < len(expert_plan_world):
+                    pos, orn = self.env._get_ef_pose()
+                    ef_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
+                    next_pos = inv_relative_pose(expert_plan_world[int(step)], ef_pose)
+                    next_pos = np.array([*next_pos[:3, 3], *mat2euler(next_pos[:3, :3])])
+                    if step == 0:
+                        expert_plan = next_pos[None].copy()
+                    else:
+                        expert_plan = np.vstack([expert_plan, next_pos])
+                    expert_action = expert_plan[int(step)]
+                else:
+                    pos, orn = self.env._get_ef_pose()
+                    ef_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
+                    next_pos = inv_relative_pose(expert_plan_world[-1], ef_pose)
+                    next_pos = np.array([*next_pos[:3, 3], *mat2euler(next_pos[:3, :3])])
+                    expert_action = next_pos
 
                 # expert
                 if not explore or (expert_initial and step < expert_initial_step):
@@ -276,7 +291,7 @@ class ActorWrapper(object):
                     grasp = 0
 
                 # step
-                next_state, reward, done, _ = self.env.step(action, delta=True)
+                next_state, reward, done, _ = self.env.step(action)
                 if VISDOM:
                     img = draw_grasp_img(next_state[0][1][:3].transpose([2, 1, 0]), unpack_pose_rot_first(goal_pose),
                                          self.K,  self.offset_pose, (0, 1., 0))
@@ -285,7 +300,7 @@ class ActorWrapper(object):
                                              self.K,  self.offset_pose, (0, 1., 0))
                     self.vis.image(img.transpose([2, 0, 1]), win=self.win_id)
 
-                if (not explore and step == expert_traj_length - 1) or step == EXTEND_MAX_STEP or (done):
+                if (not explore and step == expert_traj_length) or step == EXTEND_MAX_STEP or (done):
                     reward, res_obs = self.env.retract(record=True)
                     if VISDOM:
                         for r in res_obs:
@@ -420,7 +435,7 @@ def choose_setup():
     agent_wrapper = AgentWrapperGPU1
     actor_wrapper = ActorWrapper008
     GPUs = GPUtil.getGPUs()
-    max_memory = 25
+    max_memory = 10
 
     if len(GPUs) == 1:  # 4 GPU
         NUM_REMOTES //= 2

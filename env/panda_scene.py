@@ -18,9 +18,9 @@ from core.utils import *
 import json
 from itertools import product
 
-import OMG.ycb_render.robotPose.robot_pykdl as robot_pykdl
-from OMG.omg.config import cfg as planner_cfg
-from OMG.omg.core import PlanningScene
+from ompl.base._base import ProblemDefinition
+from planner import planner
+from planner import grasp_checker
 
 BASE_LINK = -1
 MAX_DISTANCE = 0.000
@@ -170,8 +170,8 @@ class PandaYCBEnv():
         self._standoff_dist = 0.08
 
         self.cam_offset = np.eye(4)
-        self.cam_offset[:3, 3] = (np.array([0.1186, 0., -0.0191344123493]))   # camera offset
-        self.cam_offset[:3, :3] = euler2mat(0, 0, -np.pi/2)
+        self.cam_offset[:3, 3] = (np.array([0., -0.1186, 0.0191344123493]))   # camera offset
+        self.cam_offset[:3, :3] = euler2mat(0, 0, np.pi)
         self.cur_goal = np.eye(4)
 
         self.target_idx = 0
@@ -182,6 +182,8 @@ class PandaYCBEnv():
         self.action_dim = 6
         self.hand_finger_points = hand_finger_point
         self.action_space = PandaTaskSpace6D()
+        self.upper_bound = [10, 10, 10]
+        self.lower_bound = [-10, -10, -10]
 
     def connect(self):
         """
@@ -635,33 +637,31 @@ class PandaYCBEnv():
                 print(f"{bcolors.FAIL}Expert Scene Setup Error.{bcolors.RESET}")
                 pass
         for _ in range(outer_loop_num):
-            theta = np.random.uniform(low=0, high=2*np.pi/3)
-            phi = np.random.uniform(low=np.pi/2, high=3*np.pi/2)  # top sphere
-            r = np.random.uniform(low=self._initial_near, high=self._initial_far)  # sphere radius
+            theta = np.random.uniform(low=np.pi/10, high=np.pi/6)
+            phi = np.random.uniform(low=np.pi * 1.1, high=np.pi*1.2)  # top sphere
+            if np.random.uniform() > 0.5:
+                phi *= (-1)
+            r = np.random.uniform(low=0.7, high=0.9)  # sphere radius
             pos = np.array([r*np.sin(theta)*np.cos(phi), r*np.sin(theta)*np.sin(phi), r*np.cos(theta)])
 
             trans = pos + target + np.random.uniform(-0.03, 0.03, 3)
-            trans[2] = np.clip(trans[2], 0.2, 0.6)
-            trans[1] = np.clip(trans[1], -0.3, 0.3)
-            trans[0] = np.clip(trans[0], 0.0, 0.5)
-            pos = trans - target
 
-            for i in range(inner_loop_num):
-                rand_up = np.array([0, 0, -1])
-                rand_up = rand_up / np.linalg.norm(rand_up)
-                R = inv_lookat(pos, 2 * pos, rand_up).dot(rotZ(-np.pi/2)[:3, :3])
-                quat = ros_quat(mat2quat(R))
-                ik = self.robot.inverse_kinematics(trans, quat, seed=anchor_seeds[np.random.randint(len(anchor_seeds))])  # , quat
-                if ik is not None:
-                    break
+            rand_up = np.array([0, 0, 1])
+            rand_up = rand_up / np.linalg.norm(rand_up)
+            R = inv_lookat(pos, 2 * pos, rand_up)
+            quat = ros_quat(mat2quat(R))
+            ik = self._panda.solveInverseKinematics(trans, quat)
+            if ik is not None:
+                break
         return ik
 
     def randomize_arm_init(self, near=0.35, far=0.50):
-        target_forward = self._get_target_relative_pose('base')[:3, 3]
+        target_forward = np.array(p.getBasePositionAndOrientation(self.table_id)[0])
         init_joints = self._sample_ef(target_forward, near=near, far=far)
 
         if init_joints is not None:
-            return list(init_joints) + [0, 0.04, 0.04]
+            init_joints[6] = 0.0
+            return init_joints[:7]
         return None
 
     def _get_hand_camera_view(self, cam_pose=None):
@@ -669,7 +669,7 @@ class PandaYCBEnv():
         Get hand camera view
         """
         if cam_pose is None:
-            pos, orn = p.getLinkState(self._panda.pandaUid, 18)[4:6]
+            pos, orn = p.getLinkState(self._panda.pandaUid, 19)[4:6]
             cam_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
         cam_pose_mat = unpack_pose(cam_pose)
 
@@ -708,102 +708,77 @@ class PandaYCBEnv():
         """
         Load all meshes once and then update pose
         """
-        # parameters
-
-        self.robot = robot_pykdl.robot_kinematics(None, data_path=self.root_dir + "/")
-
         print('set up expert scene ...')
-        for key, val in self._omg_config.items():
-            setattr(planner_cfg, key, val)
-
-        planner_cfg.get_global_param(planner_cfg.timesteps)
-        planner_cfg.get_global_path()
-
-        # load obstacles
-        self.planner_scene = PlanningScene(planner_cfg)
-        self.planner_scene.traj.start = np.array(self._panda.getJointStates()[0])
-        self.planner_scene.env.clear()
-        obj_names, obj_poses = self.get_env_info(self._cur_scene_file)
-        object_lists = [name.split('/')[-1].strip() for name in obj_names]
-        object_poses = [pack_pose(pose) for pose in obj_poses]
-
-        for i, name in enumerate(self.obj_path[:-2]):
-            name = name.split('/')[-2]
-            trans, orn = self.placed_object_poses[i]
-            self.planner_scene.env.add_object(name, trans, tf_quat(orn), compute_grasp=True)
-
-        self.planner_scene.env.add_plane(np.array([0.05, 0, -0.17]), np.array([1, 0, 0, 0]))  # never moved
-        self.planner_scene.env.add_table(np.array([0.55, 0, -0.17]), np.array([0.707, 0.707, 0., 0]))
-        self.planner_scene.env.combine_sdfs()
-        self._planner_setup = True
+        self.planner_scene = planner.GraspPlanner(upper_bound=self.upper_bound, lower_bound=self.lower_bound)
+        if not hasattr(self, "grasp_checker"):
+            self.grasp_checker = grasp_checker.ValidGraspChecker(self.table_id)
+        placed_uid = np.array(self._objectUids)[np.where(np.array(self.placed_objects))]
+        obj_name = self.obj_path[self.target_idx].split('/')[-2]
+        grasp_group = np.load(f'/home/ros/GA-DDPG/data/grasps/simulated/{obj_name}.npy',
+                              allow_pickle=True,
+                              fix_imports=True,
+                              encoding="bytes")
+        grasp_group = grasp_group.item()[b'transforms']
+        pos, orn = p.getBasePositionAndOrientation(self._objectUids[self.target_idx])  # to target
+        obj_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
+        grasp_set_pose = np.matmul(unpack_pose(obj_pose)[None], grasp_group)
+        self.valid_grasp, _ = self.grasp_checker.extract_grasp(grasp_set_pose, placed_uid, drawback_distance=0.015)
+        if not len(self.valid_grasp):
+            self._planner_setup = False
+        else:
+            self._planner_setup = True
 
     def expert_plan(self, step=-1, return_success=False):
         """
         Run OMG planner for the current scene
         """
         if not self._planner_setup:
+            self.reset(reset_free=True)
             self.setup_expert_scene()
         obj_names, obj_poses = self.get_env_info(self._cur_scene_file)
         object_lists = [name.split('/')[-1].strip() for name in obj_names]
 
-        object_poses = [pack_pose(pose) for pose in obj_poses]
-        exists_ids = []
         placed_poses = []
         if self.target_idx == -1 or self.target_name == 'noexists':
             if not return_success:
                 return [], np.zeros(0)
             return [], np.zeros(0), False
 
-        for i, name in enumerate(object_lists[:-2]):  # for this scene
-            self.planner_scene.env.update_pose(name, object_poses[i])
-            idx = self.obj_path[:-2].index(os.path.join(self.root_dir, 'data/objects/' + name + '/'))
-            exists_ids.append(idx)
-            trans, orn = self.placed_object_poses[idx]
-            placed_poses.append(np.hstack([trans, ros_quat(orn)]))
-
-        planner_cfg.disable_collision_set = [name.split('/')[-2] for idx, name in enumerate(self.obj_path[:-2])
-                                             if idx not in exists_ids]
-
-        joint_pos = self._panda.getJointStates()[0]
-        self.planner_scene.traj.start = np.array(joint_pos)
-        self.planner_scene.env.set_target(self.obj_path[self.target_idx].split('/')[-2])  # scene.env.names[0])
+        pos, orn = self._get_ef_pose()
+        current_ef_pose = [*pos, *orn]
+        goal_grasp_mat = self._get_nearest_goal_pose(mat=True, world=True)
+        z_bias = transZ(-0.09)
+        goal_grasp_mat = goal_grasp_mat.dot(z_bias)  # pre-grasp position
+        goal_grasp_pose = [*goal_grasp_mat[:3, 3], *ros_quat(mat2quat(goal_grasp_mat[:3, :3]))]
 
         if step > 0:  # plan length
-            self.planner_scene.env.objects[self.planner_scene.env.target_idx].compute_grasp = False
-            planner_cfg.timesteps = step  # 20
-            planner_cfg.get_global_param(planner_cfg.timesteps)
-            self.planner_scene.reset(lazy=True)
-            info = self.planner_scene.step()
-            planner_cfg.timesteps = self._expert_step  # 20
-            planner_cfg.get_global_param(planner_cfg.timesteps)
+            solver = self.planner_scene.plan(init_pos=current_ef_pose,
+                                             goal_pos=goal_grasp_pose,
+                                             path_length=step-3,
+                                             runTime=0.3)
         else:
-            self.planner_scene.reset(lazy=True)
-            info = self.planner_scene.step()
-
-        plan = self.planner_scene.planner.history_trajectories[-1]
-        pos, orn = p.getBasePositionAndOrientation(self._panda.pandaUid)
-        base_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
-        ef_pose = unpack_pose(base_pose).dot(self.robot.forward_kinematics_parallel(
-                            wrap_value(plan[-1])[None], offset=False)[0][-3])  # world coordinate
-
-        pos, orn = p.getBasePositionAndOrientation(self._objectUids[self.target_idx])  # to target
-        obj_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
-        self.cur_goal = se3_inverse(unpack_pose(obj_pose)).dot(ef_pose)
-
-        for i, name in enumerate(object_lists[:-2]):  # reset
-            self.planner_scene.env.update_pose(name, placed_poses[i])
-
-        success = info[-1]['terminate'] if len(info) > 1 else False
+            solver = self.planner_scene.plan(init_pos=current_ef_pose,
+                                             goal_pos=goal_grasp_pose,
+                                             runTime=0.3)
+        planer_path = []
+        if isinstance(solver, ProblemDefinition):
+            path = solver.getSolutionPath().getStates()
+            for i in range(len(path)):
+                waypoint = path[i]
+                rot = waypoint.rotation()
+                action = [waypoint.getX(), waypoint.getY(), waypoint.getZ(), rot.w, rot.x, rot.y, rot.z]
+                planer_path.append(action)
+            planer_path += [pack_pose(goal_grasp_mat.dot(transZ(0.03 * times))).tolist() for times in range(1, 4)]
         if not return_success:
-            return plan, np.zeros(len(plan))
-        return plan, np.zeros(len(plan)), success
+            return planer_path, np.zeros(len(path))
+        return planer_path, np.zeros(len(path)), len(path)
 
     def _randomly_place_objects(self, urdfList, scale, poses=None):
         """
         Randomize positions of each object urdf.
         """
 
-        xpos = 0.5 + 0.2 * (self._blockRandom * random.random() - 0.5) - self._shift[0]
+        xpos = 0.6 + 0.2 * (self._blockRandom * random.random() - 0.5) - self._shift[0]
         ypos = 0.5 * self._blockRandom * (random.random() - 0.5) - self._shift[0]
         obj_path = '/'.join(urdfList[0].split('/')[:-1]) + '/'
 
@@ -811,7 +786,7 @@ class PandaYCBEnv():
         self.placed_objects[self.target_idx] = True
         self.target_name = urdfList[0].split('/')[-2]
         x_rot = 0
-        z_init = -.65 + 2 * self.object_heights[self.target_idx]
+        z_init = -.65 + 1.95 * self.object_heights[self.target_idx]
         orn = p.getQuaternionFromEuler([x_rot, 0, np.random.uniform(-np.pi, np.pi)])
         p.resetBasePositionAndOrientation(self._objectUids[self.target_idx],
                                           [xpos, ypos,  z_init - self._shift[2]], [orn[0], orn[1], orn[2], orn[3]])
@@ -896,23 +871,6 @@ class PandaYCBEnv():
 
         return obj_dir, poses
 
-    def convert_action_from_joint_to_cartesian(self, joints, joint_old=None, delta=False):
-        """
-        Convert joint space action to task space action by fk
-        """
-        if joint_old is None:
-            joint_old = np.array(self._panda.getJointStates()[0])
-        if delta:
-            joints = joints + joint_old
-
-        ef_pose = self.robot.forward_kinematics_parallel(wrap_value(joint_old)[None], offset=False)[0][-3]
-        pos, rot = ef_pose[:3, 3], ef_pose[:3, :3]
-        ef_pose_ = self.robot.forward_kinematics_parallel(wrap_value(joints)[None], offset=False)[0][-3]
-        rel_pose = se3_inverse(ef_pose).dot(ef_pose_)
-        action = np.hstack([rel_pose[:3, 3], mat2euler(rel_pose[:3, :3])])
-
-        return action
-
     def process_image(self, color, depth, mask, size=None):
         """
         Normalize RGBDM
@@ -979,28 +937,28 @@ class PandaYCBEnv():
             return dist
         return 0
 
-    def _get_nearest_goal_pose(self, rotz=False, mat=False):
+    def _get_nearest_goal_pose(self, rotz=False, mat=False, world=False):
         """
         Nearest goal query
         """
-        curr_joint = np.array(self._panda.getJointStates()[0])
-        goal_set = self.planner_scene.traj.goal_set
         pos, orn = p.getLinkState(self._panda.pandaUid, self._panda.pandaEndEffectorIndex)[4:6]
         ef_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
 
         pos, orn = p.getBasePositionAndOrientation(self._objectUids[self.target_idx])  # to target
         obj_pose = list(pos) + [orn[3], orn[0], orn[1], orn[2]]
-        ws_goal_set = self.planner_scene.env.objects[self.planner_scene.env.target_idx].grasps_poses
-        grasp_set_pose = np.matmul(unpack_pose(obj_pose)[None], ws_goal_set)
-        rel_pose = np.matmul(se3_inverse(unpack_pose(ef_pose))[None], grasp_set_pose)
+        # ws_goal_set = self.valid_grasp
+        # grasp_set_pose = np.matmul(unpack_pose(obj_pose)[None], ws_goal_set)
+        rel_pose = np.matmul(se3_inverse(unpack_pose(ef_pose))[None], self.valid_grasp)
 
         point_1 = self.hand_finger_points
         point_2 = np.matmul(rel_pose[:, :3, :3], self.hand_finger_points[None]) + rel_pose[:, :3, [3]]
         pt_argmin = np.sum(np.abs(point_1[None] - point_2), axis=1).mean(-1).argmin()
-        goal_pose = grasp_set_pose[pt_argmin]
+        goal_pose = self.valid_grasp[pt_argmin]
         cur_goal = pack_pose(goal_pose)
         self.cur_goal = se3_inverse(unpack_pose(obj_pose)).dot(goal_pose)
 
+        if world:
+            return goal_pose if mat else cur_goal
         if mat:
             return inv_relative_pose(cur_goal, ef_pose).dot(rotZ(np.pi/2)) if rotz else inv_relative_pose(cur_goal, ef_pose)
         if rotz:
