@@ -361,6 +361,7 @@ if __name__ == "__main__":
     env_config['random_target'] = False
     env_config['egl_render'] = False
     env_config['domain_randomization'] = False
+    env_config['use_acronym'] = False
 
     # Tensorboard
     logdir = '{}/{}/{}_{}'.format(cfg.OUTPUT_DIR, output_time, CONFIG.env_name, POLICY)
@@ -370,7 +371,7 @@ if __name__ == "__main__":
     file = os.path.join(cfg.EXPERIMENT_OBJ_INDEX_DIR, 'ycb_large.json')
     with open(file) as f: file_dir = json.load(f)
     file_dir = file_dir['test'][:args.test_episode_num ]
-    file_dir = [f[:-5].split('.')[0][:-2] for f in file_dir]
+    file_dir = [f[:-5] for f in file_dir]
     test_file_dir = list(set(file_dir))
     goal_involved = CONFIG.policy_goal or CONFIG.policy_aux  or CONFIG.critic_aux
 

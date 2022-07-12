@@ -142,6 +142,7 @@ __C.RL_TRAIN.index_file = os.path.join(__C.EXPERIMENT_OBJ_INDEX_DIR, 'ycb_large.
 __C.RL_TRAIN.max_num_pts = 20000
 __C.RL_TRAIN.uniform_num_pts = 1024
 __C.RL_TRAIN.use_expert_plan = False
+__C.RL_TRAIN.use_acronym = False
 
 # exploration worker hyperparameter
 __C.RL_TRAIN.num_remotes = 8
@@ -202,39 +203,6 @@ def process_cfg(reset_model_spec=True):
     if __C.RL_TRAIN.policy_goal:
         __C.RL_TRAIN.train_goal_feature = True
 
-    __C.omg_config = {
-        'traj_init': 'grasp',
-        'scene_file': '',
-        'vis': False,
-        'increment_iks': True,
-        'terminate_smooth_loss': 3,
-        'ol_alg': 'Proj',
-        'pre_terminate': True,
-        'extra_smooth_steps': 5,
-        'traj_interpolate': "linear",
-        'goal_idx': -1,
-        'traj_delta': 0.05,
-        'standoff_dist': 0.08,
-        'allow_collision_point': 0,
-        'clearance': 0.03,
-        'ik_clearance': 0.07,
-        'smoothness_base_weight': 3,
-        'base_obstacle_weight': 1.,
-        'target_hand_filter_angle': 90,
-        'target_obj_collision': 1,
-        'target_epsilon': 0.06,
-        'optim_steps': 1,
-        'ik_parallel': False,
-        'ik_seed_num': 13,
-        'traj_max_step': int(__C.RL_MAX_STEP) + 6,
-        'root_dir':  root_dir + "/",
-        'traj_min_step': int(__C.RL_MAX_STEP) - 5,
-        'timesteps': int(__C.RL_MAX_STEP),
-        'dynamic_timestep': False,
-        'use_expert_plan': __C.RL_TRAIN.use_expert_plan,
-        'silent': True,
-    }
-
     __C.env_config = {
         "action_space": 'task6d',
         "data_type": 'RGBDM',
@@ -251,9 +219,9 @@ def process_cfg(reset_model_spec=True):
         "domain_randomization": __C.RL_TRAIN.domain_randomization,
         "change_dynamics": __C.RL_TRAIN.change_dynamics,
         "pt_accumulate_ratio": __C.RL_TRAIN.pt_accumulate_ratio,
-        "omg_config": __C.omg_config,
         'initial_near': __C.RL_TRAIN.ENV_NEAR,
         'initial_far':  __C.RL_TRAIN.ENV_FAR,
+        'use_acronym': __C.RL_TRAIN.use_acronym
     }
 
 

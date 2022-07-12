@@ -21,12 +21,13 @@
     </inertial>
   </link>
   <joint name="shoulder_1_joint" type="revolute">
+    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-4.712384999999999" soft_upper_limit="4.712384999999999"/>
     <parent link="base_link"/>
     <child link="shoulder_1_link"/>
     <origin rpy="0 0 0" xyz="0 0.1452 0"/>
     <axis xyz="0 1 0"/>
     <limit effort="150.0" lower="-4.712384999999999" upper="4.712384999999999" velocity="3.15"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5"/>
   </joint>
   <link name="shoulder_1_link">
     <visual>
@@ -49,12 +50,13 @@
     </inertial>
   </link>
   <joint name="shoulder_2_joint" type="revolute">
+    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.14159" soft_upper_limit="3.14159"/>
     <parent link="shoulder_1_link"/>
     <child link="arm_1_link"/>
     <origin rpy="0 0 0" xyz="0 0 0.146"/>
     <axis xyz="0 0 -1"/>
     <limit effort="150.0" lower="-3.14159" upper="3.14159" velocity="3.15"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5"/>
   </joint>
   <link name="arm_1_link">
     <visual>
@@ -77,12 +79,13 @@
     </inertial>
   </link>
   <joint name="elbow_joint" type="revolute">
+    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.14159" soft_upper_limit="3.14159"/>
     <parent link="arm_1_link"/>
     <child link="arm_2_link"/>
     <origin rpy="0 0 0" xyz="0 0.429 -0.12969999999999998"/>
     <axis xyz="0 0 -1"/>
     <limit effort="150.0" lower="-3.14159" upper="3.14159" velocity="3.15"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5"/>
   </joint>
   <link name="arm_2_link">
     <visual>
@@ -105,12 +108,13 @@
     </inertial>
   </link>
   <joint name="wrist_1_joint" type="revolute">
+    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.14159" soft_upper_limit="3.14159"/>
     <parent link="arm_2_link"/>
     <child link="wrist_1_link"/>
     <origin rpy="0 0 0" xyz="0 0.4115 0.106"/>
     <axis xyz="0 0 -1"/>
-    <limit effort="150.0" lower="-3.14159" upper="3.14159" velocity="3.15"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="30.0" lower="-3.14159" upper="3.14159" velocity="3.15"/>
+    <dynamics damping="0.5"/>
   </joint>
   <link name="wrist_1_link">
     <visual>
@@ -133,12 +137,13 @@
     </inertial>
   </link>
   <joint name="wrist_2_joint" type="revolute">
+    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.14159" soft_upper_limit="3.14159"/>
     <parent link="wrist_1_link"/>
     <child link="wrist_2_link"/>
     <origin rpy="0 0 0" xyz="0 0.106 0"/>
     <axis xyz="0 1 0"/>
-    <limit effort="150.0" lower="-3.14159" upper="3.14159" velocity="3.15"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="30.0" lower="-3.14159" upper="3.14159" velocity="3.15"/>
+    <dynamics damping="0.5"/>
   </joint>
   <link name="wrist_2_link">
     <visual>
@@ -161,12 +166,13 @@
     </inertial>
   </link>
   <joint name="wrist_3_joint" type="revolute">
+    <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-4.712384999999999" soft_upper_limit="4.712384999999999"/>
     <parent link="wrist_2_link"/>
     <child link="wrist_3_link"/>
     <origin rpy="0 0 0" xyz="0 0 0.11315"/>
     <axis xyz="0 0 1"/>
-    <limit effort="150.0" lower="-4.712384999999999" upper="4.712384999999999" velocity="3.15"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="30.0" lower="-4.712384999999999" upper="4.712384999999999" velocity="3.15"/>
+    <dynamics damping="0.5"/>
   </joint>
   <link name="wrist_3_link">
     <visual>

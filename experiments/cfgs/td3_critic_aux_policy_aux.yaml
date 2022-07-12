@@ -12,3 +12,4 @@ RL_TRAIN:
   online_buffer_ratio: 1.0
   use_expert_plan: True
   mix_policy_ratio_list: [0.1]
+  use_acronym: True

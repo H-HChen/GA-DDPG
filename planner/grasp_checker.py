@@ -5,13 +5,14 @@ import numpy as np
 
 
 class ValidGraspChecker():
-    def __init__(self, table_id) -> None:
+    def __init__(self, table_id, num_object) -> None:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         current_dir = current_dir.replace("planner", "env/models")
         print(current_dir)
         self.robot = p.loadURDF(os.path.join(current_dir, "tm5_900/robotiq_85.urdf"),
                                 useFixedBase=True)
         self.table_id = table_id
+        self.num_object = num_object
 
         # To control the gripper
         mimic_parent_name = 'finger_joint'
@@ -43,7 +44,7 @@ class ValidGraspChecker():
                                    childFramePosition=[0, 0, 0])
             p.changeConstraint(c, gearRatio=-multiplier, maxForce=100, erp=1)
 
-        for i in range(-1, 11):
+        for i in range(-1, self.num_object + 1):
             p.setCollisionFilterGroupMask(self.robot, i, 0, 0)
             p.setCollisionFilterPair(0, self.robot, -1, i, 1)
 

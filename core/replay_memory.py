@@ -9,10 +9,10 @@ import IPython
 import time
 import cv2
 import random
- 
+
 from core.utils import *
 from collections import deque
- 
+
 
 class BaseMemory(Dataset):
     """Defines a generic experience replay memory module."""
@@ -148,21 +148,21 @@ class BaseMemory(Dataset):
     def reset(self):
         self.cur_idx = 0
         self.is_full = False
- 
+
     def recompute_return_with_gamma(self):
-        end_indexes  = np.sort(np.unique(self.episode_map))
+        end_indexes = np.sort(np.unique(self.episode_map))
         copy_returns = self.returns.copy()
-       
+
         for idx in range(len(end_indexes) - 1):
             start = end_indexes[idx]
-            end = end_indexes[idx+1] 
+            end = end_indexes[idx+1]
             cost_to_go = 0
             for i in range(end - start):
                 cur_idx = end + 1
-                copy_returns[cur_idx-i-1 ] = self.reward[cur_idx-i-1] + self.gamma ** i * cost_to_go
-                cost_to_go = copy_returns[cur_idx-i-1 ]
+                copy_returns[cur_idx-i-1] = self.reward[cur_idx-i-1] + self.gamma ** i * cost_to_go
+                cost_to_go = copy_returns[cur_idx-i-1]
         self.returns = copy_returns
- 
+
     def sample(self, batch_size):
         """Samples a batch of experience from the buffer."""
 
@@ -178,13 +178,13 @@ class BaseMemory(Dataset):
     def push(self, step_dict):
         """
         Push a single data item to the replay buffer
-        """        
+        """
         if self.action is None:
             self.init_buffer()
         store_idx = self.cur_idx % len(self.point_state)
         if (
             step_dict["point_state"].shape[1] < 100
-            or step_dict["point_state"].sum() == 0 
+            or step_dict["point_state"].sum() == 0
         ):
             return
 
@@ -192,7 +192,7 @@ class BaseMemory(Dataset):
         for name in attr_names:
             if name == "image_state":
                 if self.use_image:
-                    getattr(self, name)[store_idx] =  process_image_input(
+                    getattr(self, name)[store_idx] = process_image_input(
                         step_dict[name].copy()
                     )
             elif name in step_dict:
@@ -205,7 +205,7 @@ class BaseMemory(Dataset):
 
         if self.cur_idx >= len(self.point_state) or self.cur_idx < self.buffer_start_idx:
             self.cur_idx = self.buffer_start_idx
- 
+
     def add_episode(self, episode,  explore=False, test=False):
         """
         Add an rollout to the dataset
@@ -215,8 +215,8 @@ class BaseMemory(Dataset):
             return
 
         if episode_length > 0:
-            self.update_reward(episode[-1]["reward"] > 0.5, test, explore, episode[-1]["target_name"] )
- 
+            self.update_reward(episode[-1]["reward"] > 0.5, test, explore, episode[-1]["target_name"])
+
         for transition in episode:
             self.push(transition)
 
@@ -224,41 +224,40 @@ class BaseMemory(Dataset):
             cost_to_go = 0
             for i in range(episode_length):
                 self.returns[self.cur_idx - i - 1] = (
-                    self.reward[self.cur_idx - i - 1] + self.gamma ** i * cost_to_go )
+                    self.reward[self.cur_idx - i - 1] + self.gamma ** i * cost_to_go)
                 cost_to_go = self.returns[self.cur_idx - 1 - i]
 
-            self.episode_map[self.cur_idx - episode_length : self.cur_idx] = self.cur_idx - 1
-            
+            self.episode_map[self.cur_idx - episode_length: self.cur_idx] = self.cur_idx - 1
 
-    def set_onpolicy_goal(self, data, batch_idx, vis=False ):
+    def set_onpolicy_goal(self, data, batch_idx, vis=False):
         """
-        Rewriting the on-policy goals 
-        """   
+        Rewriting the on-policy goals
+        """
         mask = self.expert_flags[batch_idx] == 0.0
-        episode_end = self.episode_map[batch_idx]   
+        episode_end = self.episode_map[batch_idx]
         increment_idx = np.minimum(episode_end, batch_idx + 1).astype(np.int)
-        goal_poses = [((se3_inverse(self.state_pose[batch_idx[i]]).dot(  #
-                        self.state_pose[episode_end[i]])))  #
-                        for i in range(len(batch_idx)) ]
-        next_goal_poses = [((se3_inverse(self.state_pose[increment_idx[i]]).dot(  #
-                            self.state_pose[episode_end[i]])))  #
-                            for i in range(len(batch_idx)) ]
+        goal_poses = [((se3_inverse(self.state_pose[batch_idx[i]]).dot(
+                        self.state_pose[episode_end[i]])))
+                        for i in range(len(batch_idx))]
+        next_goal_poses = [((se3_inverse(self.state_pose[increment_idx[i]]).dot(
+                            self.state_pose[episode_end[i]])))
+                            for i in range(len(batch_idx))]
         next_goal_batch = np.array([pack_pose_rot_first(p) for p in next_goal_poses])
         goal_batch = np.array([pack_pose_rot_first(p) for p in goal_poses])
         data["goal_batch"][mask] = goal_batch[mask]
         data["next_goal_batch"][mask] = next_goal_batch[mask]
- 
+
     def post_process_batch(self, data, batch_idx):  # self.process_sparse_sample
         """
         Set some data in batch
         """
         increment_idx = np.minimum(self.episode_map[batch_idx], batch_idx + 1).astype(np.int)
 
-        data["grasp_sample_batch"] = np.zeros([0, 4, 4])  
-        data["next_image_state_batch"] =  process_image_output(self.image_state[increment_idx])
-        data["next_goal_batch"] = np.float32( self.goal[increment_idx] )  
+        data["grasp_sample_batch"] = np.zeros([0, 4, 4])
+        data["next_image_state_batch"] = process_image_output(self.image_state[increment_idx])
+        data["next_goal_batch"] = np.float32(self.goal[increment_idx])
         data["next_expert_action_batch"] = np.float32(self.expert_action[increment_idx])
-        data["next_action_batch"] = np.float32( self.action[increment_idx] )
+        data["next_action_batch"] = np.float32(self.action[increment_idx])
         data["next_point_state_batch"] = self.point_state[increment_idx]
         data["next_return_batch"] = self.returns[increment_idx]
         data["point_state_batch"] = self.point_state[batch_idx]
@@ -270,7 +269,7 @@ class BaseMemory(Dataset):
 
         if self.self_supervision and self.name != "expert":
             self.set_onpolicy_goal(data, batch_idx)
- 
+
     def load(self, data_dir, buffer_size=100000, **kwargs):
         """
         Load data saved offline
@@ -305,18 +304,18 @@ class BaseMemory(Dataset):
                     if name == data_name:
                         print("not in data:", name)
                         continue
-                     
-                if type(data[data_name]) is not np.ndarray:        
+
+                if type(data[data_name]) is not np.ndarray:
                     setattr(self, name, data[data_name])
                     print(name, getattr(self, name))
                 else:
                     getattr(self, name)[:data_max_idx] = data[data_name][:data_max_idx]
                     print(name + " shape:", getattr(self, name).shape)
                 print("load {} time: {:.3f}".format(name, time.time() - s))
-            
-            self.cur_idx = np.amax(data["episode_map"])   
+
+            self.cur_idx = np.amax(data["episode_map"])
             self.total_env_step = int(data["total_env_step"])
-            self.is_full = (  bool(data["is_full"]) and self.cur_idx >= self.buffer_size - 1 )
+            self.is_full = (bool(data["is_full"]) and self.cur_idx >= self.buffer_size - 1)
             self.cur_idx = self.upper_idx()
             self.recompute_return_with_gamma()
 
@@ -355,7 +354,6 @@ class BaseMemory(Dataset):
         np.savez(os.path.join(save_dir, self.save_data_name), **save_dict)
         print("Saving buffer at {}, time: {:.3f}".format(save_dir, time.time() - s))
 
-
     def init_buffer(self):
         if not self.use_image:
             state_size = (1,)  # dummy
@@ -373,7 +371,7 @@ class BaseMemory(Dataset):
         self.reward = np.zeros((self.buffer_size,), dtype=np.float32)
         self.returns = np.zeros((self.buffer_size,), dtype=np.float32)
         self.pose = np.zeros((self.buffer_size,) + pose_size, dtype=np.float32)
-        self.point_state = np.zeros([self.buffer_size, 4, self.uniform_num_pts + 6])  
+        self.point_state = np.zeros([self.buffer_size, 4, self.uniform_num_pts + 6])
         self.collide = np.zeros((self.buffer_size,), dtype=np.float32)
         self.grasp = np.zeros((self.buffer_size,), dtype=np.float32)
         self.state_pose = np.zeros((self.buffer_size, 4, 4), dtype=np.float32)
@@ -382,4 +380,3 @@ class BaseMemory(Dataset):
         self.episode_map = np.zeros((self.buffer_size,), dtype=np.uint32)
         self.expert_flags = np.zeros((self.buffer_size,), dtype=np.float32)
         self.perturb_flags = np.zeros((self.buffer_size,), dtype=np.float32)
-  
