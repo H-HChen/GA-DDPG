@@ -67,11 +67,10 @@ RUN apt install -y python3-rosdep python3-rosinstall-generator python3-vcstool b
  
 RUN echo "ROS $ros1_distro installed successfully"
 
-## Setup GA-DDPG
+## Setup ompl
 COPY ./requirement/setup_repo.sh /
 RUN sh /setup_repo.sh
 RUN rm /setup_repo.sh
-RUN if [ -d "/usr/lib/python3/dist-packages/omg-0.0.0-py3.8-linux-x86_64.egg/" ]; then echo 'OMG python package build failed. Exiting.'; exit 1; fi
 
 ## setting
 RUN chown -R ${USER}:${USER} ${HOME}/
